@@ -19,6 +19,7 @@
 #include <net/flow_offload.h>
 #include <uapi/linux/devlink.h>
 #include <linux/xarray.h>
+#include <linux/firmware.h>
 
 #define DEVLINK_RELOAD_STATS_ARRAY_SIZE \
 	(__DEVLINK_RELOAD_LIMIT_MAX * __DEVLINK_RELOAD_ACTION_MAX)
@@ -624,6 +625,7 @@ enum devlink_param_generic_id {
 
 /**
  * struct devlink_flash_update_params - Flash Update parameters
+ * @fw: pointer to the firmware data to update from
  * @file_name: the name of the flash firmware file to update from
  * @component: the flash component to update
  *
@@ -632,6 +634,7 @@ enum devlink_param_generic_id {
  * their devlink_ops structure.
  */
 struct devlink_flash_update_params {
+	const struct firmware *fw;
 	const char *file_name;
 	const char *component;
 	u32 overwrite_mask;
