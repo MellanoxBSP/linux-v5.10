@@ -315,6 +315,7 @@ static int mlxreg_fan_set_cur_state(struct thermal_cooling_device *cdev,
 {
 	struct mlxreg_fan *fan = cdev->devdata;
 	unsigned long cur_state;
+	bool config = false;
 	u32 regval;
 	int i;
 	int err;
@@ -329,6 +330,7 @@ static int mlxreg_fan_set_cur_state(struct thermal_cooling_device *cdev,
 	 * overwritten.
 	 */
 	if (state >= MLXREG_FAN_SPEED_MIN && state <= MLXREG_FAN_SPEED_MAX) {
+		config = true;
 		state -= MLXREG_FAN_MAX_STATE;
 		for (i = 0; i < state; i++)
 			fan->cooling_levels[i] = state;
@@ -342,8 +344,9 @@ static int mlxreg_fan_set_cur_state(struct thermal_cooling_device *cdev,
 		}
 
 		cur_state = MLXREG_FAN_PWM_DUTY2STATE(regval);
+		/* Return non-zero value in case only configuration is perfromed through sysfs. */
 		if (state < cur_state)
-			return 0;
+			return 1;
 
 		state = cur_state;
 	}
@@ -359,7 +362,8 @@ static int mlxreg_fan_set_cur_state(struct thermal_cooling_device *cdev,
 		dev_err(fan->dev, "Failed to write PWM duty\n");
 		return err;
 	}
-	return 0;
+	/* Return non-zero value if current state has been enforced through sysfs. */
+	return (config) ? 1 : 0;
 }
 
 static const struct thermal_cooling_device_ops mlxreg_fan_cooling_ops = {
