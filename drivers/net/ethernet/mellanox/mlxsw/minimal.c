@@ -194,7 +194,7 @@ mlxsw_m_port_create(struct mlxsw_m *mlxsw_m, u8 local_port, u8 module)
 	}
 
 	netif_carrier_off(dev);
-	mlxsw_m->ports[local_port] = mlxsw_m_port;
+	mlxsw_m->ports[local_port - 1] = mlxsw_m_port;
 	err = register_netdev(dev);
 	if (err) {
 		dev_err(mlxsw_m->bus_info->dev, "Port %d: Failed to register netdev\n",
@@ -222,7 +222,7 @@ static void mlxsw_m_port_remove(struct mlxsw_m *mlxsw_m, u8 local_port)
 
 	mlxsw_core_port_clear(mlxsw_m->core, local_port, mlxsw_m);
 	unregister_netdev(mlxsw_m_port->dev); /* This calls ndo_stop */
-	mlxsw_m->ports[local_port] = NULL;
+	mlxsw_m->ports[local_port - 1] = NULL;
 	free_netdev(mlxsw_m_port->dev);
 	mlxsw_core_port_fini(mlxsw_m->core, local_port);
 }
