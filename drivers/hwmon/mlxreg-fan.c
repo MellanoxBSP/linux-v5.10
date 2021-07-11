@@ -10,6 +10,7 @@
 #include <linux/platform_data/mlxreg.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
+#include <linux/slab.h>
 #include <linux/thermal.h>
 
 #define MLXREG_FAN_MAX_TACHO		12
@@ -54,12 +55,10 @@
 #define MLXREG_FAN_GET_RPM(rval, d, s)	(DIV_ROUND_CLOSEST(15000000 * 100, \
 					 ((rval) + (s)) * (d)))
 #define MLXREG_FAN_GET_FAULT(val, mask) ((val) == (mask))
-#define MLXREG_FAN_PWM_DUTY2STATE(duty)	(DIV_ROUND_CLOSEST((duty) *	\
-					 MLXREG_FAN_MAX_STATE,		\
-					 MLXREG_FAN_MAX_DUTY))
-#define MLXREG_FAN_PWM_STATE2DUTY(stat)	(DIV_ROUND_CLOSEST((stat) *	\
-					 MLXREG_FAN_MAX_DUTY,		\
-					 MLXREG_FAN_MAX_STATE))
+#define MLXREG_FAN_PWM_DUTY2STATE(duty, max)	(DIV_ROUND_CLOSEST((duty) *	\
+						 (max), MLXREG_FAN_MAX_DUTY))
+#define MLXREG_FAN_PWM_STATE2DUTY(stat, max)	(DIV_ROUND_CLOSEST((stat) *	\
+						 MLXREG_FAN_MAX_DUTY, (max)))
 
 /*
  * struct mlxreg_fan_tacho - tachometer data (internal use):
@@ -97,7 +96,11 @@ struct mlxreg_fan_pwm {
  * @tachos_per_drwr - number of tachometers per drawer;
  * @samples: minimum allowed samples per pulse;
  * @divider: divider value for tachometer RPM calculation;
- * @cooling: cooling device levels;
+ * @cooling_levels: cooling device levels;
+ * @max_cooling_levels: maximum cooling device levels;
+ * @min_fan_state: minimum fan cooling state;
+ * @max_fan_state: maximum fan cooling state;
+ * @min_fan_speed_level: minimum fan speed level in percent;
  * @cdev: cooling device;
  */
 struct mlxreg_fan {
@@ -109,7 +112,11 @@ struct mlxreg_fan {
 	int tachos_per_drwr;
 	int samples;
 	int divider;
-	u8 cooling_levels[MLXREG_FAN_MAX_STATE + 1];
+	u8 *cooling_levels;
+	u8 max_cooling_levels;
+	u8 min_fan_state;
+	u8 max_fan_state;
+	u8 min_fan_speed_level;
 	struct thermal_cooling_device *cdev;
 };
 
@@ -286,7 +293,9 @@ static const struct hwmon_chip_info mlxreg_fan_hwmon_chip_info = {
 static int mlxreg_fan_get_max_state(struct thermal_cooling_device *cdev,
 				    unsigned long *state)
 {
-	*state = MLXREG_FAN_MAX_STATE;
+	struct mlxreg_fan *fan = cdev->devdata;
+
+	*state = fan->max_cooling_levels;
 	return 0;
 }
 
@@ -304,7 +313,7 @@ static int mlxreg_fan_get_cur_state(struct thermal_cooling_device *cdev,
 		return err;
 	}
 
-	*state = MLXREG_FAN_PWM_DUTY2STATE(regval);
+	*state = MLXREG_FAN_PWM_DUTY2STATE(regval, fan->max_cooling_levels);
 
 	return 0;
 }
@@ -329,12 +338,12 @@ static int mlxreg_fan_set_cur_state(struct thermal_cooling_device *cdev,
 	 * from 4 to 6. And state 5 (fan->cooling_levels[4]) should be
 	 * overwritten.
 	 */
-	if (state >= MLXREG_FAN_SPEED_MIN && state <= MLXREG_FAN_SPEED_MAX) {
+	if (state >= fan->min_fan_state && state <= fan->max_fan_state) {
 		config = true;
-		state -= MLXREG_FAN_MAX_STATE;
+		state -= fan->max_cooling_levels;
 		for (i = 0; i < state; i++)
 			fan->cooling_levels[i] = state;
-		for (i = state; i <= MLXREG_FAN_MAX_STATE; i++)
+		for (i = state; i <= fan->max_cooling_levels; i++)
 			fan->cooling_levels[i] = i;
 
 		err = regmap_read(fan->regmap, fan->pwm.reg, &regval);
@@ -343,7 +352,7 @@ static int mlxreg_fan_set_cur_state(struct thermal_cooling_device *cdev,
 			return err;
 		}
 
-		cur_state = MLXREG_FAN_PWM_DUTY2STATE(regval);
+		cur_state = MLXREG_FAN_PWM_DUTY2STATE(regval, fan->max_cooling_levels);
 		/* Return non-zero value in case only configuration is perfromed through sysfs. */
 		if (state < cur_state)
 			return 1;
@@ -351,13 +360,13 @@ static int mlxreg_fan_set_cur_state(struct thermal_cooling_device *cdev,
 		state = cur_state;
 	}
 
-	if (state > MLXREG_FAN_MAX_STATE)
+	if (state > fan->max_cooling_levels)
 		return -EINVAL;
 
 	/* Normalize the state to the valid speed range. */
 	state = fan->cooling_levels[state];
 	err = regmap_write(fan->regmap, fan->pwm.reg,
-			   MLXREG_FAN_PWM_STATE2DUTY(state));
+			   MLXREG_FAN_PWM_STATE2DUTY(state, fan->max_cooling_levels));
 	if (err) {
 		dev_err(fan->dev, "Failed to write PWM duty\n");
 		return err;
@@ -409,6 +418,21 @@ static int mlxreg_fan_speed_divider_get(struct mlxreg_fan *fan,
 	 */
 	if (regval > 0 && regval <= MLXREG_FAN_TACHO_DIV_SCALE_MAX)
 		fan->divider = regval * MLXREG_FAN_TACHO_DIV_MIN;
+
+	return 0;
+}
+
+static int mlxreg_fan_config_tz(struct mlxreg_fan *fan,
+				struct mlxreg_core_platform_data *pdata)
+{
+	fan->max_cooling_levels = MLXREG_FAN_MAX_STATE;
+	fan->min_fan_state = MLXREG_FAN_SPEED_MIN;
+	fan->max_fan_state = MLXREG_FAN_SPEED_MAX;
+	fan->min_fan_speed_level = MLXREG_FAN_SPEED_MIN_LEVEL;
+	fan->cooling_levels = kmalloc_array(fan->max_cooling_levels + 1,
+					    sizeof(*fan->cooling_levels), GFP_KERNEL);
+	if (!fan->cooling_levels)
+		return -ENOMEM;
 
 	return 0;
 }
@@ -506,10 +530,15 @@ static int mlxreg_fan_config(struct mlxreg_fan *fan,
 		fan->tachos_per_drwr = tacho_avail / drwr_avail;
 	}
 
+	/* Configure thermal zone. */
+	err = mlxreg_fan_config_tz(fan, pdata);
+	if (err)
+		return err;
+
 	/* Init cooling levels per PWM state. */
-	for (i = 0; i < MLXREG_FAN_SPEED_MIN_LEVEL; i++)
-		fan->cooling_levels[i] = MLXREG_FAN_SPEED_MIN_LEVEL;
-	for (i = MLXREG_FAN_SPEED_MIN_LEVEL; i <= MLXREG_FAN_MAX_STATE; i++)
+	for (i = 0; i < fan->min_fan_speed_level; i++)
+		fan->cooling_levels[i] = fan->min_fan_speed_level;
+	for (i = fan->min_fan_speed_level; i <= fan->max_cooling_levels; i++)
 		fan->cooling_levels[i] = i;
 
 	return 0;
