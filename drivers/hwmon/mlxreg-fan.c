@@ -7,6 +7,7 @@
 #include <linux/device.h>
 #include <linux/hwmon.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/platform_data/mlxreg.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
@@ -422,13 +423,51 @@ static int mlxreg_fan_speed_divider_get(struct mlxreg_fan *fan,
 	return 0;
 }
 
+static int mlxreg_fan_config_tz_of(struct mlxreg_fan *fan, struct device_node *np)
+{
+	struct property *prop;
+	int ret;
+
+	if (!IS_REACHABLE(CONFIG_OF))
+		return 0;
+
+	for_each_property_of_node(np, prop) {
+		if (!strcmp(prop->name, "cooling_levels"))
+			ret = ret < 0 ? ret : of_property_read_u8(np, "cooling_levels",
+								  &fan->max_cooling_levels);
+		if (!strcmp(prop->name, "max_level"))
+			ret = ret < 0 ? ret : of_property_read_u8(np, "max_level",
+								  &fan->max_fan_state);
+		if (!strcmp(prop->name, "min_level"))
+			ret = ret < 0 ? ret : of_property_read_u8(np, "min_level",
+								  &fan->min_fan_state);
+		if (!strcmp(prop->name, "min_level"))
+			ret = ret < 0 ? ret : of_property_read_u8(np, "min_speed_level",
+								  &fan->min_fan_speed_level);
+		if (ret < 0)
+			return ret;
+	}
+	return 0;
+}
+
 static int mlxreg_fan_config_tz(struct mlxreg_fan *fan,
 				struct mlxreg_core_platform_data *pdata)
 {
-	fan->max_cooling_levels = MLXREG_FAN_MAX_STATE;
-	fan->min_fan_state = MLXREG_FAN_SPEED_MIN;
-	fan->max_fan_state = MLXREG_FAN_SPEED_MAX;
-	fan->min_fan_speed_level = MLXREG_FAN_SPEED_MIN_LEVEL;
+	struct device_node *np;
+	int err;
+
+	np = pdata->of_node;
+	if (!np) {
+		fan->max_cooling_levels = MLXREG_FAN_MAX_STATE;
+		fan->min_fan_state = MLXREG_FAN_SPEED_MIN;
+		fan->max_fan_state = MLXREG_FAN_SPEED_MAX;
+		fan->min_fan_speed_level = MLXREG_FAN_SPEED_MIN_LEVEL;
+	} else {
+		err = mlxreg_fan_config_tz_of(fan, np);
+		if (err)
+			return err;
+	}
+
 	fan->cooling_levels = kmalloc_array(fan->max_cooling_levels + 1,
 					    sizeof(*fan->cooling_levels), GFP_KERNEL);
 	if (!fan->cooling_levels)
