@@ -190,6 +190,22 @@
 #define MLXPLAT_CPLD_WD3_DFLT_TIMEOUT	600
 #define MLXPLAT_CPLD_WD_MAX_DEVS	2
 
+static unsigned int min_speed_level = 11;
+module_param_named(fan_min_speed_level, min_speed_level, uint, 0);
+MODULE_PARM_DESC(min_speed_level, "Minimum fan speed cooling level (default 11)");
+
+static unsigned int min_level = 62;
+module_param_named(fan_min_level, min_level, uint, 0);
+MODULE_PARM_DESC(min_level, "Minimum fan speed config cooling level (default 62)");
+
+static unsigned int max_level = 102;
+module_param_named(fan_max_level, max_level, uint, 0);
+MODULE_PARM_DESC(max_level, "Maximum fan speed config cooling level (default 102)");
+
+static unsigned int cooling_levels = 102;
+module_param_named(fan_cooling_levels, cooling_levels, uint, 0);
+MODULE_PARM_DESC(cooling_levels, "Number of cooling level (default 102)");
+
 /* mlxplat_priv - platform private data
  * @pdev_i2c - i2c controller platform device
  * @pdev_mux - array of mux platform devices
@@ -1926,27 +1942,27 @@ static struct mlxreg_core_data mlxplat_mlxcpld_default_fan_data[] = {
 static struct property mlxplat_mlxcpld_default_min_cooling_speed_level_prop = {
 	.name = "min_speed_level",
 	.length = 3,
-	.value = "2",
+	.value = "11",
 };
 
 static struct property mlxplat_mlxcpld_default_min_cooling_level_prop = {
 	.name = "min_level",
 	.length = 3,
-	.value = "12",
+	.value = "62",
 	.next = &mlxplat_mlxcpld_default_min_cooling_speed_level_prop,
 };
 
 static struct property mlxplat_mlxcpld_default_max_cooling_level_prop = {
 	.name = "max_level",
-	.length = 3,
-	.value = "20",
+	.length = 4,
+	.value = "102",
 	.next = &mlxplat_mlxcpld_default_min_cooling_level_prop,
 };
 
 static struct property mlxplat_mlxcpld_default_cooling_levels_prop = {
 	.name = "cooling_levels",
 	.length = 3,
-	.value = "10",
+	.value = "51",
 	.next = &mlxplat_mlxcpld_default_max_cooling_level_prop,
 };
 
