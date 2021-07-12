@@ -1923,10 +1923,43 @@ static struct mlxreg_core_data mlxplat_mlxcpld_default_fan_data[] = {
 	},
 };
 
+static struct property mlxplat_mlxcpld_default_min_cooling_speed_level_prop = {
+	.name = "min_speed_level",
+	.length = 3,
+	.value = "2",
+};
+
+static struct property mlxplat_mlxcpld_default_min_cooling_level_prop = {
+	.name = "min_level",
+	.length = 3,
+	.value = "12",
+	.next = &mlxplat_mlxcpld_default_min_cooling_speed_level_prop,
+};
+
+static struct property mlxplat_mlxcpld_default_max_cooling_level_prop = {
+	.name = "max_level",
+	.length = 3,
+	.value = "20",
+	.next = &mlxplat_mlxcpld_default_min_cooling_level_prop,
+};
+
+static struct property mlxplat_mlxcpld_default_cooling_levels_prop = {
+	.name = "cooling_levels",
+	.length = 3,
+	.value = "10",
+	.next = &mlxplat_mlxcpld_default_max_cooling_level_prop,
+};
+
+static struct device_node mlxplat_mlxcpld_default_fan_device_node = {
+	.name = "mlxreg_fan",
+	.properties = &mlxplat_mlxcpld_default_cooling_levels_prop,
+};
+
 static struct mlxreg_core_platform_data mlxplat_default_fan_data = {
 		.data = mlxplat_mlxcpld_default_fan_data,
 		.counter = ARRAY_SIZE(mlxplat_mlxcpld_default_fan_data),
 		.capability = MLXPLAT_CPLD_LPC_REG_FAN_DRW_CAP_OFFSET,
+		.of_node = &mlxplat_mlxcpld_default_fan_device_node,
 };
 
 /* Watchdog type1: hardware implementation version1
