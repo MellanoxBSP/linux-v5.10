@@ -476,13 +476,13 @@ static int mlxsw_thermal_module_temp_get(struct thermal_zone_device *tzdev,
 
 	if (!temp)
 		return 0;
-
+#if 0
 	/* Update trip points. */
 	err = mlxsw_thermal_module_trips_update(dev, thermal->core, tz,
 						crit_temp, emerg_temp);
 	if (!err && temp > 0)
 		mlxsw_thermal_tz_score_update(thermal, tzdev, tz->trips, temp);
-
+#endif
 	return 0;
 }
 
