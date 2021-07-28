@@ -25,9 +25,9 @@
  * cooling levels vector will be set to 4, 4, 4, 4, 4, 5, 6, 7, 8, 9, 10 to
  * introduce PWM speed in percent: 40, 40, 40, 40, 40, 50, 60. 70, 80, 90, 100.
  */
-#define MLXREG_FAN_SPEED_MIN			(MLXREG_FAN_MAX_STATE + 2)
-#define MLXREG_FAN_SPEED_MAX			(MLXREG_FAN_MAX_STATE * 2)
 #define MLXREG_FAN_SPEED_MIN_LEVEL		2	/* 20 percent */
+#define MLXREG_FAN_SPEED_MIN			(MLXREG_FAN_MAX_STATE + MLXREG_FAN_SPEED_MIN_LEVEL)
+#define MLXREG_FAN_SPEED_MAX			(MLXREG_FAN_MAX_STATE * 2)
 #define MLXREG_FAN_TACHO_SAMPLES_PER_PULSE_DEF	44
 #define MLXREG_FAN_TACHO_DIV_MIN		283
 #define MLXREG_FAN_TACHO_DIV_DEF		(MLXREG_FAN_TACHO_DIV_MIN * 4)
@@ -425,29 +425,24 @@ static int mlxreg_fan_speed_divider_get(struct mlxreg_fan *fan,
 
 static int mlxreg_fan_config_tz_of(struct mlxreg_fan *fan, struct device_node *np)
 {
-	struct property *prop;
-	int ret;
+		const char *int_str;
+		int ret = 0;
 
-	if (!IS_REACHABLE(CONFIG_OF))
-		return 0;
-
-	for_each_property_of_node(np, prop) {
-		if (!strcmp(prop->name, "cooling_levels"))
-			ret = ret < 0 ? ret : of_property_read_u8(np, "cooling_levels",
-								  &fan->max_cooling_levels);
-		if (!strcmp(prop->name, "max_level"))
-			ret = ret < 0 ? ret : of_property_read_u8(np, "max_level",
-								  &fan->max_fan_state);
-		if (!strcmp(prop->name, "min_level"))
-			ret = ret < 0 ? ret : of_property_read_u8(np, "min_level",
-								  &fan->min_fan_state);
-		if (!strcmp(prop->name, "min_level"))
-			ret = ret < 0 ? ret : of_property_read_u8(np, "min_speed_level",
-								  &fan->min_fan_speed_level);
-		if (ret < 0)
-			return ret;
-	}
-	return 0;
+		if (!IS_REACHABLE(CONFIG_OF))
+			return 0;
+		ret = ret < 0 ? ret : of_property_read_string(np, "cooling_levels",  &int_str);
+		if (ret == 0)
+			ret = ret < 0 ? ret : kstrtou8(int_str, 0, &fan->max_cooling_levels);
+		ret = ret < 0 ? ret : of_property_read_string(np, "max_level",  &int_str);
+		if (ret == 0)
+			ret = ret < 0 ? ret : kstrtou8(int_str, 0, &fan->max_fan_state);
+		ret = ret < 0 ? ret : of_property_read_string(np, "min_level",  &int_str);
+		if (ret == 0)
+			ret = ret < 0 ? ret : kstrtou8(int_str, 0, &fan->min_fan_state);
+		ret = ret < 0 ? ret : of_property_read_string(np, "min_speed_level",  &int_str);
+		if (ret == 0)
+			ret = ret < 0 ? ret : kstrtou8(int_str, 0, &fan->min_fan_speed_level);
+		return ret;
 }
 
 static int mlxreg_fan_config_tz(struct mlxreg_fan *fan,
@@ -469,7 +464,7 @@ static int mlxreg_fan_config_tz(struct mlxreg_fan *fan,
 	}
 
 	fan->cooling_levels = kmalloc_array(fan->max_cooling_levels + 1,
-					    sizeof(*fan->cooling_levels), GFP_KERNEL);
+						sizeof(*fan->cooling_levels), GFP_KERNEL);
 	if (!fan->cooling_levels)
 		return -ENOMEM;
 
@@ -629,11 +624,31 @@ static int mlxreg_fan_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static int mlxreg_fan_remove(struct platform_device *pdev)
+{
+	struct mlxreg_core_platform_data *pdata;
+	struct device *dev = &pdev->dev;
+	struct mlxreg_fan *fan;
+
+	pdata = dev_get_platdata(dev);
+	if (!pdata) {
+		dev_err(dev, "Failed to get platform data.\n");
+		return -EINVAL;
+	}
+
+	fan = dev_get_drvdata(&pdev->dev);
+	if (fan && fan->cooling_levels)
+		kfree(fan->cooling_levels);
+
+	return 0;
+}
+
 static struct platform_driver mlxreg_fan_driver = {
 	.driver = {
 	    .name = "mlxreg-fan",
 	},
 	.probe = mlxreg_fan_probe,
+	.remove = mlxreg_fan_remove,
 };
 
 module_platform_driver(mlxreg_fan_driver);
