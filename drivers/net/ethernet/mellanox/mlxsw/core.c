@@ -2709,6 +2709,13 @@ u64 mlxsw_core_res_get(struct mlxsw_core *mlxsw_core,
 }
 EXPORT_SYMBOL(mlxsw_core_res_get);
 
+void mlxsw_core_thermal_max_state_get(struct mlxsw_core *mlxsw_core, int *thermal_max_state)
+{
+	struct mlxsw_driver *driver = mlxsw_core->driver;
+	*thermal_max_state = driver->thermal_max_state;
+}
+EXPORT_SYMBOL(mlxsw_core_thermal_max_state_get);
+
 static int __mlxsw_core_port_init(struct mlxsw_core *mlxsw_core, u8 local_port,
 				  enum devlink_port_flavour flavour,
 				  u32 port_number, bool split,

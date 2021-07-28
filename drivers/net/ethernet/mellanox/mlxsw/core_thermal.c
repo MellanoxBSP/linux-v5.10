@@ -23,7 +23,7 @@
 #define MLXSW_THERMAL_MODULE_TEMP_SHIFT	(MLXSW_THERMAL_HYSTERESIS_TEMP * 2)
 #define MLXSW_THERMAL_ZONE_MAX_NAME	16
 #define MLXSW_THERMAL_TEMP_SCORE_MAX	GENMASK(31, 0)
-#define MLXSW_THERMAL_MAX_STATE	10
+#define MLXSW_THERMAL_MAX_STATE_DEF	50
 #define MLXSW_THERMAL_MAX_DUTY	255
 /* Minimum and maximum fan allowed speed in percent: from 20% to 100%. Values
  * MLXSW_THERMAL_MAX_STATE + x, where x is between 2 and 10 are used for
@@ -31,8 +31,7 @@
  * cooling levels vector will be set to 4, 4, 4, 4, 4, 5, 6, 7, 8, 9, 10 to
  * introduce PWM speed in percent: 40, 40, 40, 40, 40, 50, 60. 70, 80, 90, 100.
  */
-#define MLXSW_THERMAL_SPEED_MIN		(MLXSW_THERMAL_MAX_STATE + 2)
-#define MLXSW_THERMAL_SPEED_MAX		(MLXSW_THERMAL_MAX_STATE * 2)
+
 #define MLXSW_THERMAL_SPEED_MIN_LEVEL	2		/* 20% */
 
 /* External cooling devices, allowed for binding to mlxsw thermal zones. */
@@ -54,27 +53,27 @@ struct mlxsw_thermal_trip {
 	int	max_state;
 };
 
-static const struct mlxsw_thermal_trip default_thermal_trips[] = {
+static struct mlxsw_thermal_trip default_thermal_trips[] = {
 	{	/* In range - 0-40% PWM */
 		.type		= THERMAL_TRIP_ACTIVE,
 		.temp		= MLXSW_THERMAL_ASIC_TEMP_NORM,
 		.hyst		= MLXSW_THERMAL_HYSTERESIS_TEMP,
 		.min_state	= 0,
-		.max_state	= (4 * MLXSW_THERMAL_MAX_STATE) / 10,
+		.max_state	= (4 * MLXSW_THERMAL_MAX_STATE_DEF) / 10,
 	},
 	{
 		/* In range - 40-100% PWM */
 		.type		= THERMAL_TRIP_ACTIVE,
 		.temp		= MLXSW_THERMAL_ASIC_TEMP_HIGH,
 		.hyst		= MLXSW_THERMAL_HYSTERESIS_TEMP,
-		.min_state	= (4 * MLXSW_THERMAL_MAX_STATE) / 10,
-		.max_state	= MLXSW_THERMAL_MAX_STATE,
+		.min_state	= (4 * MLXSW_THERMAL_MAX_STATE_DEF) / 10,
+		.max_state	= MLXSW_THERMAL_MAX_STATE_DEF,
 	},
 	{	/* Warning */
 		.type		= THERMAL_TRIP_HOT,
 		.temp		= MLXSW_THERMAL_ASIC_TEMP_HOT,
-		.min_state	= MLXSW_THERMAL_MAX_STATE,
-		.max_state	= MLXSW_THERMAL_MAX_STATE,
+		.min_state	= MLXSW_THERMAL_MAX_STATE_DEF,
+		.max_state	= MLXSW_THERMAL_MAX_STATE_DEF,
 	},
 };
 
@@ -98,7 +97,7 @@ struct mlxsw_thermal {
 	struct thermal_zone_device *tzdev;
 	int polling_delay;
 	struct thermal_cooling_device *cdevs[MLXSW_MFCR_PWMS_MAX];
-	u8 cooling_levels[MLXSW_THERMAL_MAX_STATE + 1];
+	u8 *cooling_levels;
 	struct mlxsw_thermal_trip trips[MLXSW_THERMAL_NUM_TRIPS];
 	struct mlxsw_thermal_module *tz_module_arr;
 	u8 tz_module_num;
@@ -106,17 +105,20 @@ struct mlxsw_thermal {
 	u8 tz_gearbox_num;
 	unsigned int tz_highest_score;
 	struct thermal_zone_device *tz_highest_dev;
+	int max_state;
+	int speed_min;
+	int speed_max;
 };
 
-static inline u8 mlxsw_state_to_duty(int state)
+static inline u8 mlxsw_state_to_duty(struct mlxsw_thermal *thermal, int state)
 {
 	return DIV_ROUND_CLOSEST(state * MLXSW_THERMAL_MAX_DUTY,
-				 MLXSW_THERMAL_MAX_STATE);
+			thermal->max_state);
 }
 
-static inline int mlxsw_duty_to_state(u8 duty)
+static inline int mlxsw_duty_to_state(struct mlxsw_thermal *thermal, u8 duty)
 {
-	return DIV_ROUND_CLOSEST(duty * MLXSW_THERMAL_MAX_STATE,
+	return DIV_ROUND_CLOSEST(duty * thermal->max_state,
 				 MLXSW_THERMAL_MAX_DUTY);
 }
 
@@ -613,7 +615,8 @@ static struct thermal_zone_device_ops mlxsw_thermal_gearbox_ops = {
 static int mlxsw_thermal_get_max_state(struct thermal_cooling_device *cdev,
 				       unsigned long *p_state)
 {
-	*p_state = MLXSW_THERMAL_MAX_STATE;
+	struct mlxsw_thermal *thermal = cdev->devdata;
+	*p_state = thermal->max_state;
 	return 0;
 }
 
@@ -639,7 +642,7 @@ static int mlxsw_thermal_get_cur_state(struct thermal_cooling_device *cdev,
 	}
 
 	duty = mlxsw_reg_mfsc_pwm_duty_cycle_get(mfsc_pl);
-	*p_state = mlxsw_duty_to_state(duty);
+	*p_state = mlxsw_duty_to_state(thermal, duty);
 	return 0;
 }
 
@@ -667,10 +670,10 @@ static int mlxsw_thermal_set_cur_state(struct thermal_cooling_device *cdev,
 	 * all from 4 to 6. And state 5 (thermal->cooling_levels[4]) should be
 	 * overwritten.
 	 */
-	if (state >= MLXSW_THERMAL_SPEED_MIN &&
-	    state <= MLXSW_THERMAL_SPEED_MAX) {
-		state -= MLXSW_THERMAL_MAX_STATE;
-		for (i = 0; i <= MLXSW_THERMAL_MAX_STATE; i++)
+	if (state >= thermal->speed_min &&
+	    state <= thermal->speed_max) {
+		state -= thermal->max_state;
+		for (i = 0; i <= thermal->max_state; i++)
 			thermal->cooling_levels[i] = max(state, i);
 
 		mlxsw_reg_mfsc_pack(mfsc_pl, idx, 0);
@@ -679,7 +682,7 @@ static int mlxsw_thermal_set_cur_state(struct thermal_cooling_device *cdev,
 			return err;
 
 		duty = mlxsw_reg_mfsc_pwm_duty_cycle_get(mfsc_pl);
-		cur_state = mlxsw_duty_to_state(duty);
+		cur_state = mlxsw_duty_to_state(thermal, duty);
 
 		/* If current fan state is lower than requested dynamical
 		 * minimum, increase fan speed up to dynamical minimum.
@@ -690,12 +693,12 @@ static int mlxsw_thermal_set_cur_state(struct thermal_cooling_device *cdev,
 		state = cur_state;
 	}
 
-	if (state > MLXSW_THERMAL_MAX_STATE)
+	if (state > thermal->max_state)
 		return -EINVAL;
 
 	/* Normalize the state to the valid speed range. */
 	state = thermal->cooling_levels[state];
-	mlxsw_reg_mfsc_pack(mfsc_pl, idx, mlxsw_state_to_duty(state));
+	mlxsw_reg_mfsc_pack(mfsc_pl, idx, mlxsw_state_to_duty(thermal, state));
 	err = mlxsw_reg_write(thermal->core, MLXSW_REG(mfsc), mfsc_pl);
 	if (err) {
 		dev_err(dev, "Failed to write PWM duty\n");
@@ -953,6 +956,9 @@ int mlxsw_thermal_init(struct mlxsw_core *core,
 	if (!thermal)
 		return -ENOMEM;
 
+	mlxsw_core_thermal_max_state_get(core, &thermal->max_state);
+	thermal->speed_min = thermal->max_state + 2;
+	thermal->speed_max = thermal->max_state * 2;
 	thermal->core = core;
 	thermal->bus_info = bus_info;
 	memcpy(thermal->trips, default_thermal_trips, sizeof(thermal->trips));
@@ -1001,9 +1007,22 @@ int mlxsw_thermal_init(struct mlxsw_core *core,
 	}
 
 	/* Initialize cooling levels per PWM state. */
-	for (i = 0; i < MLXSW_THERMAL_MAX_STATE; i++)
+	thermal->cooling_levels = kmalloc_array(thermal->max_state + 1,
+									sizeof(*thermal->cooling_levels),
+									GFP_KERNEL);
+	if (!thermal->cooling_levels) {
+		err = -ENOMEM;
+		goto err_unreg_cdevs;
+	}
+	for (i = 0; i < thermal->max_state; i++)
 		thermal->cooling_levels[i] = max(MLXSW_THERMAL_SPEED_MIN_LEVEL,
 						 i);
+	// Init default_thermal_trip
+	default_thermal_trips[0].max_state = (4 * thermal->max_state) / 10;
+	default_thermal_trips[1].min_state = (4 * thermal->max_state) / 10;
+	default_thermal_trips[1].max_state = thermal->max_state;
+	default_thermal_trips[2].min_state = thermal->max_state;
+	default_thermal_trips[2].max_state = thermal->max_state;
 
 	thermal->polling_delay = bus_info->low_frequency ?
 				 MLXSW_THERMAL_SLOW_POLL_INT :
@@ -1072,6 +1091,9 @@ void mlxsw_thermal_fini(struct mlxsw_thermal *thermal)
 			thermal->cdevs[i] = NULL;
 		}
 	}
+
+	if (thermal && thermal->cooling_levels)
+		kfree(thermal->cooling_levels);
 
 	devm_kfree(thermal->bus_info->dev, thermal);
 }

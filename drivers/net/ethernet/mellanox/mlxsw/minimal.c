@@ -14,6 +14,10 @@
 #include "core_env.h"
 #include "i2c.h"
 
+static unsigned int thermal_max_state = 10;
+module_param_named(thermal_max_state, thermal_max_state, uint, 0);
+MODULE_PARM_DESC(cooling_levels, "Thermal state  maximum value");
+
 static const char mlxsw_m_driver_name[] = "mlxsw_minimal";
 
 #define MLXSW_M_FWREV_MINOR	2000
@@ -194,7 +198,7 @@ mlxsw_m_port_create(struct mlxsw_m *mlxsw_m, u8 local_port, u8 module)
 	}
 
 	netif_carrier_off(dev);
-	mlxsw_m->ports[local_port - 1] = mlxsw_m_port;
+	mlxsw_m->ports[local_port] = mlxsw_m_port;
 	err = register_netdev(dev);
 	if (err) {
 		dev_err(mlxsw_m->bus_info->dev, "Port %d: Failed to register netdev\n",
@@ -222,7 +226,7 @@ static void mlxsw_m_port_remove(struct mlxsw_m *mlxsw_m, u8 local_port)
 
 	mlxsw_core_port_clear(mlxsw_m->core, local_port, mlxsw_m);
 	unregister_netdev(mlxsw_m_port->dev); /* This calls ndo_stop */
-	mlxsw_m->ports[local_port - 1] = NULL;
+	mlxsw_m->ports[local_port] = NULL;
 	free_netdev(mlxsw_m_port->dev);
 	mlxsw_core_port_fini(mlxsw_m->core, local_port);
 }
@@ -256,7 +260,7 @@ static int mlxsw_m_ports_create(struct mlxsw_m *mlxsw_m)
 
 	/* Create port objects for each entry. */
 	for (i = 0; i < mlxsw_m->max_ports; i++) {
-		mlxsw_m->module_to_port[i] = i + 1;
+		mlxsw_m->module_to_port[i] = i;
 		err = mlxsw_m_port_create(mlxsw_m, mlxsw_m->module_to_port[i], i);
 		if (err)
 			goto err_module_to_port_create;
@@ -364,6 +368,7 @@ static int __init mlxsw_m_module_init(void)
 {
 	int err;
 
+	mlxsw_m_driver.thermal_max_state = thermal_max_state;
 	err = mlxsw_core_driver_register(&mlxsw_m_driver);
 	if (err)
 		return err;

@@ -376,6 +376,7 @@ struct mlxsw_driver {
 	bool res_query_enabled;
 	bool fw_fatal_enabled;
 	bool temp_warn_enabled;
+	int thermal_max_state;
 };
 
 int mlxsw_core_kvd_sizes_get(struct mlxsw_core *mlxsw_core,
@@ -396,6 +397,9 @@ bool mlxsw_core_res_valid(struct mlxsw_core *mlxsw_core,
 
 u64 mlxsw_core_res_get(struct mlxsw_core *mlxsw_core,
 		       enum mlxsw_res_id res_id);
+
+void mlxsw_core_thermal_max_state_get(struct mlxsw_core *mlxsw_core,
+				   int *thermal_max_state);
 
 #define MLXSW_CORE_RES_GET(mlxsw_core, short_res_id)			\
 	mlxsw_core_res_get(mlxsw_core, MLXSW_RES_ID_##short_res_id)
