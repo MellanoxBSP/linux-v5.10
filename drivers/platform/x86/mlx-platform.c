@@ -190,21 +190,22 @@
 #define MLXPLAT_CPLD_WD3_DFLT_TIMEOUT	600
 #define MLXPLAT_CPLD_WD_MAX_DEVS	2
 
-static unsigned int min_speed_level = 11;
+static unsigned int min_speed_level = 2;
 module_param_named(fan_min_speed_level, min_speed_level, uint, 0);
-MODULE_PARM_DESC(min_speed_level, "Minimum fan speed cooling level (default 11)");
+MODULE_PARM_DESC(min_speed_level, "Minimum fan speed cooling level (default 2)");
 
-static unsigned int min_level = 62;
+static unsigned int min_level = 12;
 module_param_named(fan_min_level, min_level, uint, 0);
-MODULE_PARM_DESC(min_level, "Minimum fan speed config cooling level (default 62)");
+MODULE_PARM_DESC(min_level, "Minimum fan speed config cooling level (default 12)");
 
-static unsigned int max_level = 102;
+static unsigned int max_level = 20;
 module_param_named(fan_max_level, max_level, uint, 0);
-MODULE_PARM_DESC(max_level, "Maximum fan speed config cooling level (default 102)");
+MODULE_PARM_DESC(max_level, "Maximum fan speed config cooling level (default 20)");
 
-static unsigned int cooling_levels = 102;
+static unsigned int cooling_levels = 10;
 module_param_named(fan_cooling_levels, cooling_levels, uint, 0);
-MODULE_PARM_DESC(cooling_levels, "Number of cooling level (default 102)");
+MODULE_PARM_DESC(cooling_levels, "Number of cooling level (default 10)");
+
 
 /* mlxplat_priv - platform private data
  * @pdev_i2c - i2c controller platform device
@@ -2879,6 +2880,17 @@ static int mlxplat_mlxcpld_check_wd_capability(void *regmap)
 	return 0;
 }
 
+static inline void __update_prop_val_str(struct device_node *of_node,
+								 const char * prop_name, u8 new_val)
+{
+	struct property *prop  = of_find_property(of_node, prop_name, NULL);
+
+	if (prop != NULL){
+		prop->value = kasprintf(GFP_KERNEL, "%d", new_val);
+		prop->length =  strlen(prop->value) + 1;
+	}
+}
+
 static int __init mlxplat_init(void)
 {
 	struct mlxplat_priv *priv;
@@ -2998,6 +3010,16 @@ static int __init mlxplat_init(void)
 
 	/* Add FAN driver. */
 	if (mlxplat_fan) {
+		if (mlxplat_fan->of_node) {
+			__update_prop_val_str(mlxplat_fan->of_node, "min_speed_level",
+						  min_speed_level);
+			__update_prop_val_str(mlxplat_fan->of_node, "min_level",
+						  min_level);
+			__update_prop_val_str(mlxplat_fan->of_node, "max_level",
+						  max_level);
+			__update_prop_val_str(mlxplat_fan->of_node, "cooling_levels",
+						  cooling_levels);
+		}
 		mlxplat_fan->regmap = priv->regmap;
 		priv->pdev_fan = platform_device_register_resndata(
 					&mlxplat_dev->dev, "mlxreg-fan",
