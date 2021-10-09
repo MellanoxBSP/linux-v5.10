@@ -22,6 +22,8 @@
 #define ADC_STEP_MV			2
 #define ADC_MAX_LOW_MEASUREMENT_MV	2000
 
+enum powr1xxx_chips { powr1220, powr1014 };
+
 enum powr1220_regs {
 	VMON_STATUS0,
 	VMON_STATUS1,
@@ -74,6 +76,7 @@ enum powr1220_adc_values {
 struct powr1220_data {
 	struct i2c_client *client;
 	struct mutex update_lock;
+	u8 max_channels;
 	bool adc_valid[MAX_POWR1220_ADC_VALUES];
 	 /* the next value is in jiffies */
 	unsigned long adc_last_updated[MAX_POWR1220_ADC_VALUES];
@@ -128,11 +131,8 @@ static int powr1220_read_adc(struct device *dev, int ch_num)
 		if (result)
 			goto exit;
 
-		/*
-		 * wait at least Tconvert time (200 us) for the
-		 * conversion to complete
-		 */
-		usleep(200);
+		/* wait Tconvert time (200us - 400us) for the conversion to complete */
+		usleep_range(200, 400);
 
 		/* get the ADC reading */
 		result = i2c_smbus_read_byte_data(data->client, ADC_VALUE_LOW);
@@ -170,6 +170,9 @@ static umode_t
 powr1220_is_visible(const void *data, enum hwmon_sensor_types type, u32
 		    attr, int channel)
 {
+	if (((struct powr1220_data *)data)->max_channels <= channel)
+		return 0;
+
 	switch (type) {
 	case hwmon_in:
 		switch (attr) {
@@ -270,6 +273,8 @@ static const struct hwmon_chip_info powr1220_chip_info = {
 	.info = powr1220_info,
 };
 
+static const struct i2c_device_id powr1220_ids[];
+
 static int powr1220_probe(struct i2c_client *client)
 {
 	struct powr1220_data *data;
@@ -281,6 +286,15 @@ static int powr1220_probe(struct i2c_client *client)
 	data = devm_kzalloc(&client->dev, sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
+
+	switch (i2c_match_id(powr1220_ids, client)->driver_data) {
+	case powr1014:
+		data->max_channels = 10;
+		break;
+	default:
+		data->max_channels = 12;
+		break;
+	}
 
 	mutex_init(&data->update_lock);
 	data->client = client;
@@ -294,6 +308,7 @@ static int powr1220_probe(struct i2c_client *client)
 
 static const struct i2c_device_id powr1220_ids[] = {
 	{ "powr1220", 0, },
+	{ "powr1014", 0, },
 	{ }
 };
 
