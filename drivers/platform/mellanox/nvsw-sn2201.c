@@ -840,13 +840,14 @@ static void nvsw_sn2201_main_mux_work(struct work_struct *work)
 
 	adap = i2c_get_adapter(nvsw_sn2201->main_mux_deferred_nr);
 	if (!adap) {
-		cancel_delayed_work(&nvsw_sn2201->main_mux_dwork);
-		if (nvsw_sn2201->main_mux_dwork_counter++ < NVSW_SN2201_DEFER_COUNT)
+		if (nvsw_sn2201->main_mux_dwork_counter++ < NVSW_SN2201_DEFER_COUNT) {
+			cancel_delayed_work(&nvsw_sn2201->main_mux_dwork);
 			schedule_delayed_work(&nvsw_sn2201->main_mux_dwork,
 					      NVSW_SN2201_DEFER_TIME);
-		else
+		} else {
 			dev_err(dev, "Failed to get adapter for bus %d\n",
 				nvsw_sn2201->main_mux_deferred_nr);
+		}
 		return;
 	}
 	i2c_put_adapter(adap);
