@@ -223,6 +223,10 @@ enum devlink_port_type mlxsw_core_port_type_get(struct mlxsw_core *mlxsw_core,
 struct devlink_port *
 mlxsw_core_port_devlink_port_get(struct mlxsw_core *mlxsw_core,
 				 u8 local_port);
+void mlxsw_core_ports_remove_selected(struct mlxsw_core *mlxsw_core,
+				      bool (*selector)(void *priv,
+						       u16 local_port),
+				      void *priv);
 struct mlxsw_env *mlxsw_core_env(const struct mlxsw_core *mlxsw_core);
 int mlxsw_core_module_max_width(struct mlxsw_core *mlxsw_core, u8 module);
 
@@ -296,6 +300,10 @@ struct mlxsw_driver {
 			  unsigned int count, struct netlink_ext_ack *extack);
 	int (*port_unsplit)(struct mlxsw_core *mlxsw_core, u8 local_port,
 			    struct netlink_ext_ack *extack);
+	void (*ports_remove_selected)(struct mlxsw_core *mlxsw_core,
+				      bool (*selector)(void *priv,
+						       u16 local_port),
+				      void *priv);
 	int (*sb_pool_get)(struct mlxsw_core *mlxsw_core,
 			   unsigned int sb_index, u16 pool_index,
 			   struct devlink_sb_pool_info *pool_info);
