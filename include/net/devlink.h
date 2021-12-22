@@ -140,6 +140,8 @@ struct devlink_port {
 	struct delayed_work type_warn_dw;
 	struct list_head reporter_list;
 	struct mutex reporters_lock; /* Protects reporter_list */
+
+	struct devlink_linecard *linecard;
 };
 
 struct devlink_linecard_ops;
