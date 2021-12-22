@@ -2870,6 +2870,15 @@ mlxsw_core_port_devlink_port_get(struct mlxsw_core *mlxsw_core,
 }
 EXPORT_SYMBOL(mlxsw_core_port_devlink_port_get);
 
+void mlxsw_core_ports_remove_selected(struct mlxsw_core *mlxsw_core,
+				      bool (*selector)(void *priv, u16 local_port),
+				      void *priv)
+{
+	if (WARN_ON(!mlxsw_core->driver->ports_remove_selected))
+		return;
+	mlxsw_core->driver->ports_remove_selected(mlxsw_core, selector, priv);
+}
+
 struct mlxsw_env *mlxsw_core_env(const struct mlxsw_core *mlxsw_core)
 {
 	return mlxsw_core->env;
