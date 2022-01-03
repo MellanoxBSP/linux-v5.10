@@ -246,7 +246,7 @@ mlxsw_m_port_create(struct mlxsw_m *mlxsw_m, u8 slot_index, u16 local_port,
 	module_offset = slot_index ? (slot_index - 1) *
 			mlxsw_m->max_module_count : 0;
 
-	err = mlxsw_core_port_init(mlxsw_m->core, local_port,
+	err = mlxsw_core_port_init(mlxsw_m->core, local_port + module_offset, 0,
 				   module + 1 + module_offset, false, 0, false,
 				   0, mlxsw_m->base_mac,
 				   sizeof(mlxsw_m->base_mac));
@@ -317,16 +317,19 @@ static void mlxsw_m_port_remove(struct mlxsw_m *mlxsw_m, u8 slot_index,
 {
 	struct mlxsw_m_port_mapping *port_mapping;
 	struct mlxsw_m_port *mlxsw_m_port;
+	u8 module_offset;
 
 	port_mapping = mlxsw_m_port_mapping_get(mlxsw_m, slot_index,
 						local_port);
 	mlxsw_m_port = port_mapping->port;
+	module_offset = mlxsw_m_port->module_offset;
 
-	mlxsw_core_port_clear(mlxsw_m->core, local_port, mlxsw_m);
+	mlxsw_core_port_clear(mlxsw_m->core, local_port + module_offset,
+			      mlxsw_m);
 	unregister_netdev(mlxsw_m_port->dev); /* This calls ndo_stop */
 	port_mapping->port = NULL;
 	free_netdev(mlxsw_m_port->dev);
-	mlxsw_core_port_fini(mlxsw_m->core, local_port);
+	mlxsw_core_port_fini(mlxsw_m->core, local_port + module_offset);
 }
 
 static int mlxsw_m_port_module_map(struct mlxsw_m *mlxsw_m, u8 slot_index,
