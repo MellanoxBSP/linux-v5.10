@@ -48,6 +48,7 @@ struct mlxsw_core_port {
 	struct devlink_port devlink_port;
 	void *port_driver_priv;
 	u8 local_port;
+	struct mlxsw_linecard *linecard;
 };
 
 void *mlxsw_core_port_driver_priv(struct mlxsw_core_port *mlxsw_core_port)
@@ -2723,7 +2724,7 @@ EXPORT_SYMBOL(mlxsw_core_res_get);
 
 static int __mlxsw_core_port_init(struct mlxsw_core *mlxsw_core, u8 local_port,
 				  enum devlink_port_flavour flavour,
-				  u32 port_number, bool split,
+				  u8 slot_index, u32 port_number, bool split,
 				  u32 split_port_subnumber,
 				  bool splittable, u32 lanes,
 				  const unsigned char *switch_id,
@@ -2746,6 +2747,15 @@ static int __mlxsw_core_port_init(struct mlxsw_core *mlxsw_core, u8 local_port,
 	attrs.switch_id.id_len = switch_id_len;
 	mlxsw_core_port->local_port = local_port;
 	devlink_port_attrs_set(devlink_port, &attrs);
+	if (slot_index) {
+		struct mlxsw_linecard *linecard;
+
+		linecard = mlxsw_linecard_get(mlxsw_core->linecards,
+					      slot_index);
+		mlxsw_core_port->linecard = linecard;
+		devlink_port_linecard_set(devlink_port,
+					  linecard->devlink_linecard);
+	}
 	err = devlink_port_register(devlink, devlink_port, local_port);
 	if (err)
 		memset(mlxsw_core_port, 0, sizeof(*mlxsw_core_port));
@@ -2763,14 +2773,14 @@ static void __mlxsw_core_port_fini(struct mlxsw_core *mlxsw_core, u8 local_port)
 }
 
 int mlxsw_core_port_init(struct mlxsw_core *mlxsw_core, u8 local_port,
-			 u32 port_number, bool split,
+			 u8 slot_index, u32 port_number, bool split,
 			 u32 split_port_subnumber,
 			 bool splittable, u32 lanes,
 			 const unsigned char *switch_id,
 			 unsigned char switch_id_len)
 {
 	return __mlxsw_core_port_init(mlxsw_core, local_port,
-				      DEVLINK_PORT_FLAVOUR_PHYSICAL,
+				      DEVLINK_PORT_FLAVOUR_PHYSICAL, slot_index,
 				      port_number, split, split_port_subnumber,
 				      splittable, lanes,
 				      switch_id, switch_id_len);
@@ -2794,7 +2804,7 @@ int mlxsw_core_cpu_port_init(struct mlxsw_core *mlxsw_core,
 
 	err = __mlxsw_core_port_init(mlxsw_core, MLXSW_PORT_CPU_PORT,
 				     DEVLINK_PORT_FLAVOUR_CPU,
-				     0, false, 0, false, 0,
+				     0, 0, false, 0, false, 0,
 				     switch_id, switch_id_len);
 	if (err)
 		return err;
