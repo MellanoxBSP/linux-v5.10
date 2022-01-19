@@ -36,13 +36,6 @@
 #define NVSW_SN2201_FRONT_UID_LED_CTRL_OFFSET       0x13
 #define NVSW_SN2201_QSFP28_LED_TEST_STATUS_OFFSET   0x14
 #define NVSW_SN2201_SYS_RST_STATUS_OFFSET           0x15
-#define NVSW_SN2201_WDT_CTRL_OFFSET                 0x17
-#define NVSW_SN2201_WDT_BOOT_STATUS_OFFSET          0x18
-#define NVSW_SN2201_WDT_ID_OFFSET                   0x19
-#define NVSW_SN2201_WDT_NOWAYOUT_OFFSET             0x1A
-#define NVSW_SN2201_WDT_STATE_OFFSET                0x1B
-#define NVSW_SN2201_WDT_TIMEOUT_OFFSET              0x1C
-#define NVSW_SN2201_WDT_TIMELEFT_OFFSET             0x1D
 #define NVSW_SN2201_SYS_INT_STATUS_OFFSET           0x21
 #define NVSW_SN2201_SYS_INT_MASK_OFFSET             0x22
 #define NVSW_SN2201_ASIC_STATUS_OFFSET              0x24
@@ -62,7 +55,14 @@
 #define NVSW_SN2201_PS_DC_OK_MASK_OFFSET            0x35
 #define NVSW_SN2201_RST_CAUSE1_OFFSET               0x36
 #define NVSW_SN2201_RST_CAUSE2_OFFSET               0x37
-#define NVSW_SN2201_REG_MAX                         0x38
+#define NVSW_SN2201_RST_SW_CTRL_OFFSET              0x38
+#define NVSW_SN2201_FAN_PRSNT_STATUS_OFFSET         0x3A
+#define NVSW_SN2201_FAN_PRSNT_EVENT_OFFSET          0x3B
+#define NVSW_SN2201_FAN_PRSNT_MASK_OFFSET           0x3C
+#define NVSW_SN2201_WD_TMR_OFFSET_LSB               0x40
+#define NVSW_SN2201_WD_TMR_OFFSET_MSB               0x41
+#define NVSW_SN2201_WD_ACT_OFFSET                   0x42
+#define NVSW_SN2201_REG_MAX                         0x43
 
 /* Number of physical I2C busses. */
 #define NVSW_SN2201_PHY_I2C_BUS_NUM		2
@@ -85,27 +85,37 @@
 #define NVSW_SN2201_MAIN_MUX_CH6_NR	(NVSW_SN2201_MAIN_MUX_CH0_NR + 6)
 #define NVSW_SN2201_MAIN_MUX_CH7_NR	(NVSW_SN2201_MAIN_MUX_CH0_NR + 7)
 
+#define NVSW_SN2201_FAN_MUX_CH0_NR	(NVSW_SN2201_MAIN_MUX_CH7_NR + 1)
+#define NVSW_SN2201_FAN_MUX_CH1_NR	(NVSW_SN2201_MAIN_MUX_CH7_NR + 2)
+#define NVSW_SN2201_FAN_MUX_CH2_NR	(NVSW_SN2201_MAIN_MUX_CH7_NR + 3)
+#define NVSW_SN2201_FAN_MUX_CH3_NR	(NVSW_SN2201_MAIN_MUX_CH7_NR + 4)
+
 #define NVSW_SN2201_CPLD_NR		NVSW_SN2201_MAIN_MUX_CH0_NR
 #define NVSW_SN2201_NR_NONE		-1
 
 /* Masks for aggregation, PSU presence and power, ASIC events
  * in CPLD related registers.
  */
-#define NVSW_SN2201_CPLD_AGGR_ASIC_MASK_DEF	0xF0
+#define NVSW_SN2201_CPLD_AGGR_ASIC_MASK_DEF	0xE0
 #define NVSW_SN2201_CPLD_AGGR_PSU_MASK_DEF	0x04
 #define NVSW_SN2201_CPLD_AGGR_PWR_MASK_DEF	0x02
+#define NVSW_SN2201_CPLD_AGGR_FAN_MASK_DEF	0x10
 #define NVSW_SN2201_CPLD_AGGR_MASK_DEF      \
 	(NVSW_SN2201_CPLD_AGGR_ASIC_MASK_DEF \
 	| NVSW_SN2201_CPLD_AGGR_PSU_MASK_DEF \
-	| NVSW_SN2201_CPLD_AGGR_PWR_MASK_DEF)
+	| NVSW_SN2201_CPLD_AGGR_PWR_MASK_DEF \
+	| NVSW_SN2201_CPLD_AGGR_FAN_MASK_DEF)
 
-#define NVSW_SN2201_CPLD_ASIC_MASK		GENMASK(3, 0)
+#define NVSW_SN2201_CPLD_ASIC_MASK		GENMASK(3, 1)
 #define NVSW_SN2201_CPLD_PSU_MASK		GENMASK(1, 0)
 #define NVSW_SN2201_CPLD_PWR_MASK		GENMASK(1, 0)
+#define NVSW_SN2201_CPLD_FAN_MASK		GENMASK(3, 0)
 
 #define NVSW_SN2201_CPLD_SYSIRQ			26
 #define NVSW_SN2201_LPC_SYSIRQ			28
 #define NVSW_SN2201_CPLD_I2CADDR		0x41
+
+#define NVSW_SN2201_WD_DFLT_TIMEOUT		600
 
 /* nvsw_sn2201 - device private data
  * @dev: platform device;
@@ -128,9 +138,11 @@ struct nvsw_sn2201 {
 	struct device *dev;
 	struct mlxreg_core_platform_data *io_data;
 	struct mlxreg_core_platform_data *led_data;
+	struct mlxreg_core_platform_data *wd_data;
 	struct mlxreg_core_hotplug_platform_data *hotplug_data;
 	struct mlxreg_core_hotplug_platform_data *i2c_data;
 	struct platform_device *led;
+	struct platform_device *wd;
 	struct platform_device *io_regs;
 	struct platform_device *pdev_hotplug;
 	struct platform_device *pdev_i2c;
@@ -155,8 +167,6 @@ static bool nvsw_sn2201_writeable_reg(struct device *dev, unsigned int reg)
 	case NVSW_SN2201_FRONT_UID_LED_CTRL_OFFSET:
 	case NVSW_SN2201_QSFP28_LED_TEST_STATUS_OFFSET:
 	case NVSW_SN2201_SYS_RST_STATUS_OFFSET:
-	case NVSW_SN2201_WDT_CTRL_OFFSET:
-	case NVSW_SN2201_WDT_TIMEOUT_OFFSET:
 	case NVSW_SN2201_SYS_INT_MASK_OFFSET:
 	case NVSW_SN2201_ASIC_EVENT_OFFSET:
 	case NVSW_SN2201_ASIC_MAKS_OFFSET:
@@ -168,6 +178,12 @@ static bool nvsw_sn2201_writeable_reg(struct device *dev, unsigned int reg)
 	case NVSW_SN2201_PS_PRSNT_MASK_OFFSET:
 	case NVSW_SN2201_PS_DC_OK_EVENT_OFFSET:
 	case NVSW_SN2201_PS_DC_OK_MASK_OFFSET:
+	case NVSW_SN2201_RST_SW_CTRL_OFFSET:
+	case NVSW_SN2201_FAN_PRSNT_EVENT_OFFSET:
+	case NVSW_SN2201_FAN_PRSNT_MASK_OFFSET:
+	case NVSW_SN2201_WD_TMR_OFFSET_LSB:
+	case NVSW_SN2201_WD_TMR_OFFSET_MSB:
+	case NVSW_SN2201_WD_ACT_OFFSET:
 		return true;
 	}
 	return false;
@@ -194,13 +210,6 @@ static bool nvsw_sn2201_readable_reg(struct device *dev, unsigned int reg)
 	case NVSW_SN2201_SYS_RST_STATUS_OFFSET:
 	case NVSW_SN2201_RST_CAUSE1_OFFSET:
 	case NVSW_SN2201_RST_CAUSE2_OFFSET:
-	case NVSW_SN2201_WDT_CTRL_OFFSET:
-	case NVSW_SN2201_WDT_BOOT_STATUS_OFFSET:
-	case NVSW_SN2201_WDT_ID_OFFSET:
-	case NVSW_SN2201_WDT_NOWAYOUT_OFFSET:
-	case NVSW_SN2201_WDT_STATE_OFFSET:
-	case NVSW_SN2201_WDT_TIMEOUT_OFFSET:
-	case NVSW_SN2201_WDT_TIMELEFT_OFFSET:
 	case NVSW_SN2201_SYS_INT_STATUS_OFFSET:
 	case NVSW_SN2201_SYS_INT_MASK_OFFSET:
 	case NVSW_SN2201_ASIC_STATUS_OFFSET:
@@ -218,6 +227,13 @@ static bool nvsw_sn2201_readable_reg(struct device *dev, unsigned int reg)
 	case NVSW_SN2201_PS_DC_OK_STATUS_OFFSET:
 	case NVSW_SN2201_PS_DC_OK_EVENT_OFFSET:
 	case NVSW_SN2201_PS_DC_OK_MASK_OFFSET:
+	case NVSW_SN2201_RST_SW_CTRL_OFFSET:
+	case NVSW_SN2201_FAN_PRSNT_STATUS_OFFSET:
+	case NVSW_SN2201_FAN_PRSNT_EVENT_OFFSET:
+	case NVSW_SN2201_FAN_PRSNT_MASK_OFFSET:
+	case NVSW_SN2201_WD_TMR_OFFSET_LSB:
+	case NVSW_SN2201_WD_TMR_OFFSET_MSB:
+	case NVSW_SN2201_WD_ACT_OFFSET:
 		return true;
 	}
 	return false;
@@ -244,13 +260,6 @@ static bool nvsw_sn2201_volatile_reg(struct device *dev, unsigned int reg)
 	case NVSW_SN2201_SYS_RST_STATUS_OFFSET:
 	case NVSW_SN2201_RST_CAUSE1_OFFSET:
 	case NVSW_SN2201_RST_CAUSE2_OFFSET:
-	case NVSW_SN2201_WDT_CTRL_OFFSET:
-	case NVSW_SN2201_WDT_BOOT_STATUS_OFFSET:
-	case NVSW_SN2201_WDT_ID_OFFSET:
-	case NVSW_SN2201_WDT_NOWAYOUT_OFFSET:
-	case NVSW_SN2201_WDT_STATE_OFFSET:
-	case NVSW_SN2201_WDT_TIMEOUT_OFFSET:
-	case NVSW_SN2201_WDT_TIMELEFT_OFFSET:
 	case NVSW_SN2201_SYS_INT_STATUS_OFFSET:
 	case NVSW_SN2201_SYS_INT_MASK_OFFSET:
 	case NVSW_SN2201_ASIC_STATUS_OFFSET:
@@ -268,6 +277,12 @@ static bool nvsw_sn2201_volatile_reg(struct device *dev, unsigned int reg)
 	case NVSW_SN2201_PS_DC_OK_STATUS_OFFSET:
 	case NVSW_SN2201_PS_DC_OK_EVENT_OFFSET:
 	case NVSW_SN2201_PS_DC_OK_MASK_OFFSET:
+	case NVSW_SN2201_RST_SW_CTRL_OFFSET:
+	case NVSW_SN2201_FAN_PRSNT_STATUS_OFFSET:
+	case NVSW_SN2201_FAN_PRSNT_EVENT_OFFSET:
+	case NVSW_SN2201_FAN_PRSNT_MASK_OFFSET:
+	case NVSW_SN2201_WD_TMR_OFFSET_LSB:
+	case NVSW_SN2201_WD_TMR_OFFSET_MSB:
 		return true;
 	}
 	return false;
@@ -275,6 +290,7 @@ static bool nvsw_sn2201_volatile_reg(struct device *dev, unsigned int reg)
 
 static const struct reg_default nvsw_sn2201_regmap_default[] = {
 	{ NVSW_SN2201_QSFP28_LED_TEST_STATUS_OFFSET, 0x00 },
+	{ NVSW_SN2201_WD_ACT_OFFSET, 0x00 },
 };
 
 /* Configuration for the register map of a device with 1 bytes address space. */
@@ -350,6 +366,22 @@ static struct i2c_board_info nvsw_sn2201_pwr_devices[] = {
 	},
 };
 
+/* SN2201 fan devices. */
+static struct i2c_board_info nvsw_sn2201_fan_devices[] = {
+	{
+		I2C_BOARD_INFO("24c02", 0x50),
+	},
+	{
+		I2C_BOARD_INFO("24c02", 0x51),
+	},
+	{
+		I2C_BOARD_INFO("24c02", 0x52),
+	},
+	{
+		I2C_BOARD_INFO("24c02", 0x53),
+	},
+};
+
 /* SN2201 hotplug default data */
 static struct mlxreg_core_data nvsw_sn2201_psu_items_data[] = {
 	{
@@ -383,13 +415,38 @@ static struct mlxreg_core_data nvsw_sn2201_pwr_items_data[] = {
 	},
 };
 
-static struct mlxreg_core_data nvsw_sn2201_sys_items_data[] = {
+static struct mlxreg_core_data nvsw_sn2201_fan_items_data[] = {
 	{
-		.label = "fan_event",
-		.reg = NVSW_SN2201_ASIC_STATUS_OFFSET,
+		.label = "fan1",
+		.reg = NVSW_SN2201_FAN_PRSNT_STATUS_OFFSET,
 		.mask = BIT(0),
-		.hpdev.nr = NVSW_SN2201_NR_NONE,
+		.hpdev.brdinfo = &nvsw_sn2201_fan_devices[0],
+		.hpdev.nr = NVSW_SN2201_FAN_MUX_CH0_NR,
 	},
+	{
+		.label = "fan2",
+		.reg = NVSW_SN2201_FAN_PRSNT_STATUS_OFFSET,
+		.mask = BIT(1),
+		.hpdev.brdinfo = &nvsw_sn2201_fan_devices[1],
+		.hpdev.nr = NVSW_SN2201_FAN_MUX_CH1_NR,
+	},
+	{
+		.label = "fan3",
+		.reg = NVSW_SN2201_FAN_PRSNT_STATUS_OFFSET,
+		.mask = BIT(2),
+		.hpdev.brdinfo = &nvsw_sn2201_fan_devices[2],
+		.hpdev.nr = NVSW_SN2201_FAN_MUX_CH2_NR,
+	},
+	{
+		.label = "fan4",
+		.reg = NVSW_SN2201_FAN_PRSNT_STATUS_OFFSET,
+		.mask = BIT(3),
+		.hpdev.brdinfo = &nvsw_sn2201_fan_devices[3],
+		.hpdev.nr = NVSW_SN2201_FAN_MUX_CH3_NR,
+	},
+};
+
+static struct mlxreg_core_data nvsw_sn2201_sys_items_data[] = {
 	{
 		.label = "nic_smb_alert",
 		.reg = NVSW_SN2201_ASIC_STATUS_OFFSET,
@@ -427,6 +484,15 @@ static struct mlxreg_core_item nvsw_sn2201_items[] = {
 		.mask = NVSW_SN2201_CPLD_PWR_MASK,
 		.count = ARRAY_SIZE(nvsw_sn2201_pwr_items_data),
 		.inversed = 0,
+		.health = false,
+	},
+	{
+		.data = nvsw_sn2201_fan_items_data,
+		.aggr_mask = NVSW_SN2201_CPLD_AGGR_FAN_MASK_DEF,
+		.reg = NVSW_SN2201_FAN_PRSNT_STATUS_OFFSET,
+		.mask = NVSW_SN2201_CPLD_FAN_MASK,
+		.count = ARRAY_SIZE(nvsw_sn2201_fan_items_data),
+		.inversed = 1,
 		.health = false,
 	},
 	{
@@ -611,6 +677,12 @@ static struct mlxreg_core_data nvsw_sn2201_io_data[] = {
 		.mode = 0644,
 	},
 	{
+		.label = "pwr_cycle",
+		.reg = NVSW_SN2201_PSU_CTRL_OFFSET,
+		.mask = GENMASK(7, 0) & ~BIT(2),
+		.mode = 0644,
+	},
+	{
 		.label = "asic_health",
 		.reg = NVSW_SN2201_SYS_STATUS_OFFSET,
 		.mask = GENMASK(4, 3),
@@ -633,6 +705,12 @@ static struct mlxreg_core_data nvsw_sn2201_io_data[] = {
 		.label = "mac_reset",
 		.reg = NVSW_SN2201_SYS_RST_STATUS_OFFSET,
 		.mask = GENMASK(7, 0) & ~BIT(2),
+		.mode = 0644,
+	},
+	{
+		.label = "pwr_down",
+		.reg = NVSW_SN2201_RST_SW_CTRL_OFFSET,
+		.mask = GENMASK(7, 0) & ~BIT(0),
 		.mode = 0644,
 	},
 	{
@@ -732,6 +810,45 @@ static struct mlxreg_core_platform_data nvsw_sn2201_regs_io = {
 	.counter = ARRAY_SIZE(nvsw_sn2201_io_data),
 };
 
+static struct mlxreg_core_data nvsw_sn2201_wd_data[] = {
+	{
+		.label = "action",
+		.reg = NVSW_SN2201_WD_ACT_OFFSET,
+		.mask = GENMASK(7, 1),
+		.bit = 0,
+	},
+	{
+		.label = "timeout",
+		.reg = NVSW_SN2201_WD_TMR_OFFSET_LSB,
+		.mask = 0,
+		.health_cntr = NVSW_SN2201_WD_DFLT_TIMEOUT,
+	},
+	{
+		.label = "timeleft",
+		.reg = NVSW_SN2201_WD_TMR_OFFSET_LSB,
+		.mask = 0,
+	},
+	{
+		.label = "ping",
+		.reg = NVSW_SN2201_WD_ACT_OFFSET,
+		.mask = GENMASK(7, 1),
+		.bit = 0,
+	},
+	{
+		.label = "reset",
+		.reg = NVSW_SN2201_RST_CAUSE1_OFFSET,
+		.mask = GENMASK(7, 0) & ~BIT(6),
+		.bit = 6,
+	},
+};
+
+static struct mlxreg_core_platform_data nvsw_sn2201_wd = {
+	.data = nvsw_sn2201_wd_data,
+	.counter = ARRAY_SIZE(nvsw_sn2201_wd_data),
+	.version = MLX_WDT_TYPE3,
+	.identity = "mlx-wdt-main",
+};
+
 static int
 nvsw_sn2201_create_static_devices(struct nvsw_sn2201 *nvsw_sn2201,
 				  struct mlxreg_hotplug_device *devs,
@@ -822,6 +939,7 @@ static int nvsw_sn2201_config_init(struct nvsw_sn2201 *nvsw_sn2201, void *regmap
 
 	nvsw_sn2201->io_data = &nvsw_sn2201_regs_io;
 	nvsw_sn2201->led_data = &nvsw_sn2201_led;
+	nvsw_sn2201->wd_data = &nvsw_sn2201_wd;
 	nvsw_sn2201->hotplug_data = &nvsw_sn2201_hotplug;
 
 	/* Register IO access driver. */
@@ -850,6 +968,19 @@ static int nvsw_sn2201_config_init(struct nvsw_sn2201 *nvsw_sn2201, void *regmap
 		}
 	}
 
+	/* Register WD driver. */
+	if (nvsw_sn2201->wd_data) {
+		nvsw_sn2201->wd_data->regmap = regmap;
+		nvsw_sn2201->wd =
+		platform_device_register_resndata(dev, "mlx-wdt", PLATFORM_DEVID_NONE, NULL, 0,
+						  nvsw_sn2201->wd_data,
+						  sizeof(*nvsw_sn2201->wd_data));
+		if (IS_ERR(nvsw_sn2201->wd)) {
+			err = PTR_ERR(nvsw_sn2201->wd);
+			goto fail_register_wd;
+		}
+	}
+
 	/* Register hotplug driver. */
 	if (nvsw_sn2201->hotplug_data) {
 		nvsw_sn2201->hotplug_data->regmap = regmap;
@@ -868,6 +999,9 @@ static int nvsw_sn2201_config_init(struct nvsw_sn2201 *nvsw_sn2201, void *regmap
 	return nvsw_sn2201_config_post_init(nvsw_sn2201);
 
 fail_register_hotplug:
+	if (nvsw_sn2201->wd)
+		platform_device_unregister(nvsw_sn2201->wd);
+fail_register_wd:
 	if (nvsw_sn2201->led)
 		platform_device_unregister(nvsw_sn2201->led);
 fail_register_led:
@@ -883,6 +1017,9 @@ static void nvsw_sn2201_config_exit(struct nvsw_sn2201 *nvsw_sn2201)
 	/* Unregister hotplug driver. */
 	if (nvsw_sn2201->pdev_hotplug)
 		platform_device_unregister(nvsw_sn2201->pdev_hotplug);
+	/* Unregister WD driver. */
+	if (nvsw_sn2201->wd)
+		platform_device_unregister(nvsw_sn2201->wd);
 	/* Unregister LED driver. */
 	if (nvsw_sn2201->led)
 		platform_device_unregister(nvsw_sn2201->led);
