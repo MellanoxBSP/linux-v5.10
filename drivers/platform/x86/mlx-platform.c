@@ -3478,13 +3478,25 @@ static struct mlxreg_core_data mlxplat_mlxcpld_default_ng_regs_io_data[] = {
 		.mode = 0444,
 	},
 	{
-		.label = "erot_all_reset",
+		.label = "erot1_reset",
+		.reg = MLXPLAT_CPLD_LPC_REG_RESET_GP2_OFFSET,
+		.bit = GENMASK(7, 0) & ~BIT(6),
+		.mode = 0644,
+	},
+	{
+		.label = "erot2_reset",
+		.reg = MLXPLAT_CPLD_LPC_REG_RESET_GP2_OFFSET,
+		.bit = GENMASK(7, 0) & ~BIT(7),
+		.mode = 0644,
+	},
+
+		.label = "erot1_recovery",
 		.reg = MLXPLAT_CPLD_LPC_REG_PWM_CONTROL_OFFSET,
 		.bit = GENMASK(7, 0) & ~BIT(6),
 		.mode = 0644,
 	},
 	{
-		.label = "erot_all_recovery",
+		.label = "erot2_recovery",
 		.reg = MLXPLAT_CPLD_LPC_REG_PWM_CONTROL_OFFSET,
 		.bit = GENMASK(7, 0) & ~BIT(7),
 		.mode = 0644,
