@@ -798,6 +798,7 @@ static int lan743x_mac_init(struct lan743x_adapter *adapter)
 
 	/* disable auto duplex, and speed detection. Phylib does that */
 	data = lan743x_csr_read(adapter, MAC_CR);
+
 	data &= ~(MAC_CR_ADD_ | MAC_CR_ASD_);
 	data |= MAC_CR_CNTR_RST_;
 	lan743x_csr_write(adapter, MAC_CR, data);
@@ -1008,7 +1009,10 @@ static void lan743x_phy_close(struct lan743x_adapter *adapter)
 	struct net_device *netdev = adapter->netdev;
 
 	phy_stop(netdev->phydev);
-	phy_disconnect(netdev->phydev);
+	if (IS_REACHABLE(CONFIG_LAN743X_FIXED_PHY))
+		fixed_phy_unregister(netdev->phydev);
+	else
+		phy_disconnect(netdev->phydev);
 	netdev->phydev = NULL;
 }
 
@@ -1044,11 +1048,24 @@ static int lan743x_phy_open(struct lan743x_adapter *adapter)
 
 	if (!phydev) {
 		/* try internal phy */
-		phydev = phy_find_first(adapter->mdiobus);
+		if (IS_REACHABLE(CONFIG_LAN743X_FIXED_PHY)) {
+			struct fixed_phy_status phy_status;
+
+			phy_status.link = 1;
+			phy_status.speed = 1000;
+			phy_status.duplex = DUPLEX_FULL;
+			phy_status.pause = 0;
+			phy_status.asym_pause = 0;
+			adapter->phy_mode = PHY_INTERFACE_MODE_RGMII;
+			phydev = fixed_phy_register(PHY_POLL, &phy_status, 0);
+		} else {
+			adapter->phy_mode = PHY_INTERFACE_MODE_GMII;
+			phydev = phy_find_first(adapter->mdiobus);
+		}
+
 		if (!phydev)
 			goto return_error;
 
-		adapter->phy_mode = PHY_INTERFACE_MODE_GMII;
 		ret = phy_connect_direct(netdev, phydev,
 					 lan743x_phy_link_status_change,
 					 adapter->phy_mode);
@@ -1065,7 +1082,8 @@ static int lan743x_phy_open(struct lan743x_adapter *adapter)
 	phy->fc_autoneg = phydev->autoneg;
 
 	phy_start(phydev);
-	phy_start_aneg(phydev);
+	if (!IS_REACHABLE(CONFIG_LAN743X_FIXED_PHY))
+		phy_start_aneg(phydev);
 	return 0;
 
 return_error:
